@@ -1,0 +1,9 @@
+node_modules
+playground
+dist
+*.db
+*.db-wal
+*.db-shm
+coverage
+*.log
+.env
