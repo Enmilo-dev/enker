@@ -21,6 +21,48 @@ export class Ctx {
     return `${this.runId}:${name}`;
   }
 
+  async step<T>(
+    name: string,
+    fn: () => Promise<T> | T,
+    opts: StepOptions = {},
+  ): Promise<T> {
+    if (this.seen.has(name)) {
+      throw new Error(`duplicate step name "${name}" in run ${this.runId}`);
+    }
+    this.seen.add(name);
+
+    const row = this.db
+      .prepare(`SELECT * FROM steps WHERE run_id = ? AND name = ?`)
+      .get(this.runId, name) as StepRow | undefined;
+
+    if (row?.status === "done") {
+      return JSON.parse(row.result!) as T;
+    }
+
+    const retries = opts.retries ?? 3;
+    const baseDelayMs = opts.baseDelayMs ?? 1000;
+
+    let attempt = row?.attempts ?? 0;
+
+    while (true) {
+      attempt++;
+      this.markRunning(name, attempt);
+
+      try {
+        const result = await fn();
+        this.markDone(name, result);
+        return result;
+      } catch (err) {
+        if (attempt >= retries) {
+          this.markFailed(name, err);
+          throw err;
+        }
+        const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), 30_000);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
   private markDone(name: string, result: unknown) {
     this.db
       .prepare(
