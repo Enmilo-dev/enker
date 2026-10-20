@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { openDB } from "./storage";
 import { Ctx } from "./context";
 import type { RunRow } from "./types";
+import { SuspendSignal } from "./errors";
 
 type WorkflowFn = (ctx: Ctx, input: any) => Promise<unknown>;
 
@@ -51,10 +52,19 @@ export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
 
       return out;
     } catch (err) {
+      if (err instanceof SuspendSignal) {
+        db.prepare(
+          `UPDATE runs SET status = 'sleeping', wake_at = ?, lease_until = NULL, updated_at = ?
+          WHERE id = ?`,
+        ).run(err.wakeAt, Date.now(), id);
+        return undefined;
+      }
+
       db.prepare(
         `UPDATE runs SET status = 'failed', error = ?, lease_until = NULL, updated_at = ?
         WHERE id = ?`,
       ).run(err instanceof Error ? err.message : String(err), Date.now(), id);
+
       throw err;
     } finally {
       clearInterval(heartbeat);
@@ -72,10 +82,14 @@ export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
     const now = Date.now();
     const claimed = db
       .prepare(
-        `UPDATE runs SET status = 'running', lease_until = ?, updated_at = ?
-      WHERE id = ? AND (status = 'pending' OR (status = 'running' AND lease_until < ?))`,
+        `UPDATE runs SET status = 'running', lease_until = ?, wake_at = NULL, updated_at = ?
+         WHERE id = ? AND (
+           status = 'pending'
+           OR (status = 'running' AND lease_until < ?)
+           OR (status = 'sleeping' AND wake_at <= ?)
+         )`,
       )
-      .run(now + leaseMs, now, runId, now).changes;
+      .run(now + leaseMs, now, runId, now, now).changes;
 
     if (claimed !== 1) return;
 
@@ -87,12 +101,15 @@ export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
   }
 
   function recover() {
+    const now = Date.now();
     const rows = db
       .prepare(
         `SELECT id FROM runs
-      WHERE status = 'pending' OR (status = 'running' AND lease_until < ?)`,
+         WHERE status = 'pending'
+            OR (status = 'running' AND lease_until < ?)
+            OR (status = 'sleeping' AND wake_at <= ?)`,
       )
-      .all(Date.now()) as { id: string }[];
+      .all(now, now) as { id: string }[];
 
     for (const { id } of rows) {
       execute(id).catch((err) =>

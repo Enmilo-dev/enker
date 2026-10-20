@@ -1,5 +1,6 @@
 import type { Database as DB } from "better-sqlite3";
 import type { StepRow } from "./types";
+import { SuspendSignal } from "./errors";
 
 export interface StepOptions {
   retries?: number;
@@ -26,10 +27,7 @@ export class Ctx {
     fn: () => Promise<T> | T,
     opts: StepOptions = {},
   ): Promise<T> {
-    if (this.seen.has(name)) {
-      throw new Error(`duplicate step name "${name}" in run ${this.runId}`);
-    }
-    this.seen.add(name);
+    this.useName(name);
 
     const row = this.db
       .prepare(`SELECT * FROM steps WHERE run_id = ? AND name = ?`)
@@ -53,6 +51,8 @@ export class Ctx {
         this.markDone(name, result);
         return result;
       } catch (err) {
+        if (err instanceof SuspendSignal) throw err;
+
         if (attempt >= retries) {
           this.markFailed(name, err);
           throw err;
@@ -61,6 +61,30 @@ export class Ctx {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
+  }
+
+  async sleep(name: string, ms: number): Promise<void> {
+    this.useName(name);
+
+    const row = this.db
+      .prepare(`SELECT * FROM steps WHERE run_id = ? AND name = ?`)
+      .get(this.runId, name) as StepRow | undefined;
+
+    if (row?.status === "done") return;
+
+    const wakeAt = row?.wake_at ?? Date.now() + ms;
+    if (!row) {
+      this.db
+        .prepare(
+          `INSERT INTO steps (run_id, name, seq, status, wake_at, started_at)
+           VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM steps WHERE run_id = ?), 'running', ?, ?)`,
+        )
+        .run(this.runId, name, this.runId, wakeAt, Date.now());
+    }
+
+    if (Date.now() < wakeAt) throw new SuspendSignal(wakeAt);
+
+    this.markDone(name, null);
   }
 
   private markDone(name: string, result: unknown) {
@@ -93,5 +117,12 @@ export class Ctx {
       `,
       )
       .run(this.runId, name, this.runId, attempt, Date.now());
+  }
+
+  private useName(name: string) {
+    if (this.seen.has(name)) {
+      throw new Error(`duplicate step name "${name}" in run "${this.runId}"`);
+    }
+    this.seen.add(name);
   }
 }
