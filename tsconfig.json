@@ -8,5 +8,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src", "tests", "playground"]
+  "include": ["src", "tests", "playground", "crash-test"]
 }
