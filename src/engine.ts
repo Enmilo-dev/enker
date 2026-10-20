@@ -36,6 +36,11 @@ export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
   }
 
   async function perform(id: string, fn: WorkflowFn, input: unknown) {
+    const heartbeat = setInterval(() => {
+      db.prepare(
+        `UPDATE runs SET lease_until = ? WHERE id = ? AND status = 'running'`,
+      ).run(Date.now() + leaseMs, id);
+    }, leaseMs / 3);
     try {
       const out = await fn(new Ctx(db, id), input);
 
@@ -51,6 +56,8 @@ export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
         WHERE id = ?`,
       ).run(err instanceof Error ? err.message : String(err), Date.now(), id);
       throw err;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 
@@ -78,5 +85,43 @@ export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
       //perform already saved it as a failed
     }
   }
-  return { db, workflow, execute, close: () => db.close() };
+
+  function recover() {
+    const rows = db
+      .prepare(
+        `SELECT id FROM runs
+      WHERE status = 'pending' OR (status = 'running' AND lease_until < ?)`,
+      )
+      .all(Date.now()) as { id: string }[];
+
+    for (const { id } of rows) {
+      execute(id).catch((err) =>
+        console.error(`enker: run ${id} crashed`, err),
+      );
+    }
+  }
+
+  let timer: NodeJS.Timeout | undefined;
+
+  function start(intervalMs = 1000) {
+    if (timer) return;
+    recover();
+    timer = setInterval(recover, intervalMs);
+  }
+
+  function stop() {
+    clearInterval(timer);
+    timer = undefined;
+  }
+  return {
+    db,
+    workflow,
+    execute,
+    start,
+    stop,
+    close: () => {
+      stop();
+      db.close();
+    },
+  };
 }
