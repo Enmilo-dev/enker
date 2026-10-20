@@ -3,6 +3,7 @@ import { openDB } from "./storage";
 import { Ctx } from "./context";
 import type { RunRow } from "./types";
 import { SuspendSignal } from "./errors";
+import { replay } from "./replay";
 
 type WorkflowFn = (ctx: Ctx, input: any) => Promise<unknown>;
 
@@ -136,6 +137,7 @@ export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
     execute,
     start,
     stop,
+    replay: (runId: string, fromStep?: string) => replay(db, runId, fromStep),
     close: () => {
       stop();
       db.close();
