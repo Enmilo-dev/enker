@@ -5,7 +5,12 @@ import type { RunRow } from "./types";
 
 type WorkflowFn = (ctx: Ctx, input: any) => Promise<unknown>;
 
-export function createEngine({ dbPath }: { dbPath: string }) {
+export interface EngineOptions {
+  dbPath: string;
+  leaseMs?: number;
+}
+
+export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
   const db = openDB(dbPath);
   const registry = new Map<string, WorkflowFn>();
 
@@ -22,7 +27,7 @@ export function createEngine({ dbPath }: { dbPath: string }) {
       db.prepare(
         `INSERT INTO runs (id, workflow, input, status, lease_until, created_at, updated_at)
         VALUES (?, ?, ?, 'running', ?, ?, ?)`,
-      ).run(id, name, json, now + 30_000, now, now);
+      ).run(id, name, json, now + leaseMs, now, now);
 
       return perform(id, fn, JSON.parse(json));
     }
@@ -63,7 +68,7 @@ export function createEngine({ dbPath }: { dbPath: string }) {
         `UPDATE runs SET status = 'running', lease_until = ?, updated_at = ?
       WHERE id = ? AND (status = 'pending' OR (status = 'running' AND lease_until < ?))`,
       )
-      .run(now + 30_000, now, runId, now).changes;
+      .run(now + leaseMs, now, runId, now).changes;
 
     if (claimed !== 1) return;
 
@@ -73,5 +78,5 @@ export function createEngine({ dbPath }: { dbPath: string }) {
       //perform already saved it as a failed
     }
   }
-  return { db, workflow, execute };
+  return { db, workflow, execute, close: () => db.close() };
 }
