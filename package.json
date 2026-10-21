@@ -13,7 +13,7 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "enker": "./dist/cli.js"
+    "enker": "dist/cli.js"
   },
   "files": [
     "dist"
