@@ -1,3 +1,4 @@
+import type { Database as DB } from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { openDB } from "./storage";
 import { Ctx } from "./context";
@@ -5,14 +6,31 @@ import type { RunRow } from "./types";
 import { SuspendSignal } from "./errors";
 import { replay } from "./replay";
 
-type WorkflowFn = (ctx: Ctx, input: any) => Promise<unknown>;
+export type WorkflowFn = (ctx: Ctx, input: any) => Promise<unknown>;
 
+export interface Workflow {
+  name: string;
+  run(input: unknown): Promise<unknown>;
+}
+
+export interface Engine {
+  db: DB;
+  workflow(name: string, fn: WorkflowFn): Workflow;
+  execute(runId: string): Promise<void>;
+  start(intervalMs?: number): void;
+  stop(): void;
+  replay(runId: string, fromStep?: string): void;
+  close(): void;
+}
 export interface EngineOptions {
   dbPath: string;
   leaseMs?: number;
 }
 
-export function createEngine({ dbPath, leaseMs = 30_000 }: EngineOptions) {
+export function createEngine({
+  dbPath,
+  leaseMs = 30_000,
+}: EngineOptions): Engine {
   const db = openDB(dbPath);
   const registry = new Map<string, WorkflowFn>();
 
