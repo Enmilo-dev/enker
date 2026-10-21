@@ -16,6 +16,16 @@ const { values, positionals } = parseArgs({
 
 const [command, id] = positionals;
 
+const usage = `usage:
+  enker list [--status failed] [--db path]
+  enker show <runId>
+  enker replay <runId> [--from step]`;
+
+if (!["list", "show", "replay"].includes(command ?? "")) {
+  console.log(usage);
+  process.exit(command ? 1 : 0);
+}
+
 if (!existsSync(values.db)) {
   console.error(`no database at ${values.db} (use --db <path>)`);
   process.exit(1);
@@ -106,10 +116,7 @@ switch (command) {
     replayRun(id);
     break;
   default:
-    console.log(`usage:
-  enker list [--status failed] [--db path]
-  enker show <runId>
-  enker replay <runId> [--from step]`);
+    console.log(usage);
 }
 
 db.close();
