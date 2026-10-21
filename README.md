@@ -1,7 +1,7 @@
 # enker
 
-[![npm](https://img.shields.io/npm/v/enker)](https://www.npmjs.com/package/enker)
-[![license](https://img.shields.io/npm/l/enker)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/@enmilo/enker)](https://www.npmjs.com/package/@enmilo/enker)
+[![license](https://img.shields.io/npm/l/@enmilo/enker)](./LICENSE)
 
 Crash-safe workflow steps for Node.js and TypeScript, backed by SQLite. Resume after crashes, retry, sleep, and replay failed runs. No server, no queue, just a library and one database file.
 
@@ -32,15 +32,15 @@ That moment (the money moved, but the system never recorded it) is exactly what 
 ## Install
 
 ```bash
-npm install enker
+npm install @enmilo/enker
 ```
 
-Requires Node.js 22.12 or newer. Works from ESM and CommonJS (`require("enker")`).
+Requires Node.js 22.12 or newer. Works from ESM and CommonJS (`require("@enmilo/enker")`).
 
 ## Quick start
 
 ```ts
-import { createEngine } from "enker";
+import { createEngine } from "@enmilo/enker";
 
 const engine = createEngine({ dbPath: "./app.db" });
 
