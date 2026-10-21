@@ -1,6 +1,6 @@
 # enker
 
-[![npm](https://img.shields.io/npm/v/@enmilo%2fenker)](https://www.npmjs.com/package/@enmilo/enker)
+[![npm](https://img.shields.io/npm/v/@enmilo/enker)](https://www.npmjs.com/package/@enmilo/enker)
 [![license](https://img.shields.io/npm/l/@enmilo/enker)](./LICENSE)
 
 Crash-safe workflow steps for Node.js and TypeScript, backed by SQLite. Resume after crashes, retry, sleep, and replay failed runs. No server, no queue, just a library and one database file.
